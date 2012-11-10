@@ -8,24 +8,32 @@ class Mutator
     # mutations.select{|m| m[1][0] == 0 }.each {|m| puts m.inspect }
   end
   
-  def calc
+  def calc math = @math, level = 0, orig_math = @math
+    return if level == 2
+    
+    # puts "on level #{level}, math is #{math.join('')}"
     mut = get_mutations
     zero = mut.select{|m| m[1][0] == 0}
     plus = mut.select{|m| m[1][0] == 1}
     minus = mut.select{|m| m[1][0] == -1}
-    found = false
+
+    result = nil
+    
+    next_level_tries = []
     
     # puts "Trying simple changes..."
     zero.each do |m|
-      m1 = @math.dup;
+      m1 = math.dup
       m1[m[0][0]] = m[0][1]
-      m1 = m1.join
+      m2 = m1.join
       
-      expr = m1.gsub('=', '==')
-      res = eval expr
-      if res
-        found = true
-        puts "#{@math.join} => #{m1}" if res
+      expr = m2.gsub('=', '==')
+      valid = eval expr
+      if valid
+        result ||= "#{orig_math.join} => #{m2} (cost #{level + 1})"
+      else
+        # puts "appending #{m2}"
+        next_level_tries << m1
       end
     end
     
@@ -34,29 +42,40 @@ class Mutator
       minus.each do |m|
         next if p[0][0] == m[0][0]
         
-        m1 = @math.dup;
+        m1 = math.dup
         m1[p[0][0]] = p[0][1]
         m1[m[0][0]] = m[0][1]
-        m1 = m1.join
+        m2 = m1.join
 
-        expr = m1.gsub('=', '==')
-        res = eval expr
-        if res
-          found = true
-          # puts "#{@math[p[0][0]]} -> #{p[0][1]}"
-          # puts "#{@math[m[0][0]]} -> #{m[0][1]}"
-          puts "#{@math.join} => #{m1}" if res
+        expr = m2.gsub('=', '==')
+        valid = eval expr
+        if valid
+          result ||= "#{orig_math.join} => #{m2} (cost #{level + 1})"
+        else
+          # puts "appending #{m2}"
+          next_level_tries << m1
         end
       end
     end
-    
-    puts "No solutions found for #{@math.join}" unless found
+
+    result || next_level_tries.map{|t| calc t, level + 1, orig_math }.compact.first
   end
   
   
   
   private
   
+  # transformations and their cost
+  # [0, 9] => [0, 1]
+  # here [0, 9] is [from, to] and [0, 1] is [total_cost, num_matches]
+  # cost of [0, 1] means that to tranform 0 to 9 one needs to move one match within the
+  # same place (minus one match, plus one match, zero in total).
+  #
+  # [6, 8] => [1, 1] is another example. Here no zero sum is possible. It costs one match
+  #   to get an 8 from 6. You need to get that match from somewhere.
+  # 
+  # ['+', '-'] => [-1, 1] - yet another example. You need to move one match to another 
+  #   place, so that a plus can become a minus.
   MUTATIONS = {
     [0, 9] => [0, 1],
     [0, 6] => [0, 1],
@@ -85,7 +104,8 @@ class Mutator
     end
     res
   end
-  
+
+  # get only relevant mutations
   def get_mutations
     res = []
     
